@@ -1,6 +1,7 @@
 import openai
+from openai import OpenAI
 from time import sleep
-from openai.error import RateLimitError, APIConnectionError
+from openai import RateLimitError, APIConnectionError
 from pygments import highlight
 from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
@@ -19,6 +20,7 @@ class LMP:
         self._cfg = cfg
         self._debug = debug
         self._base_prompt = load_prompt(f"{env}/{self._cfg['prompt_fname']}.txt")
+        print(f"{env}/{self._cfg['prompt_fname']}.txt")
         self._stop_tokens = list(self._cfg["stop"])
         self._fixed_vars = fixed_vars
         self._variable_vars = variable_vars
@@ -91,9 +93,7 @@ class LMP:
                 print("(using cache)", end=" ")
                 return self._cache[kwargs]
             else:
-                ret = openai.ChatCompletion.create(**kwargs)["choices"][0]["message"][
-                    "content"
-                ]
+                ret = self._call_aliyun_api(**kwargs)
                 # post processing
                 ret = ret.replace("```", "").replace("python", "").strip()
                 self._cache[kwargs] = ret
@@ -106,6 +106,28 @@ class LMP:
                 ret = openai.Completion.create(**kwargs)["choices"][0]["text"].strip()
                 self._cache[kwargs] = ret
                 return ret
+
+    def _call_openai_api(self, **kwargs):
+        ret = openai.ChatCompletion.create(**kwargs)["choices"][0]["message"]["content"]
+        return ret
+
+    def _call_aliyun_api(self, **kwargs):
+        client = OpenAI(
+            # 若没有配置环境变量，请用百炼API Key将下行替换为：api_key="sk-xxx",
+            api_key="sk-524f61a72bed4fc9813fcc4e9b768bb3",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+        messages = kwargs["messages"]
+        completion = client.chat.completions.create(
+            model="qwen-vl-max-latest",
+            messages=messages,
+            response_format={"type": "text"},
+        )
+        assistant_message = completion.choices[0].message.content.strip()
+        print("=================================")
+        print(f"assistant_message: {assistant_message}")
+        print("=================================")
+        return assistant_message
 
     def __call__(self, query, **kwargs):
         prompt, user_query = self.build_prompt(query)
